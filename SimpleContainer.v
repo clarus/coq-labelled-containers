@@ -292,5 +292,3 @@ Module TestMonad.
 
   Compute two.
 End TestMonad.
-
-
