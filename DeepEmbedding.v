@@ -86,6 +86,29 @@ Module C.
     t refs channels A -> (A -> t refs channels B) -> t refs channels B
   | get : forall (A : Type), Getter.C A refs ->
     t refs channels A
-  | write : forall (A : Type),
+  | write : forall (A : Type), Writer.C A channels ->
     A -> t refs channels unit.
+  Arguments ret [refs channels A] _.
+  Arguments bind [refs channels A B] _ _.
+  Arguments get [refs channels A _].
+  Arguments write [refs channels A _] _.
+
+  Fixpoint run_aux (refs channels : Signature.t) (A : Type)
+    (mem : Memory.t refs) (output : Output.t channels) (x : t refs channels A)
+    : A * Output.t channels :=
+    match x with
+    | ret _ x => (x, output)
+    | bind _ _ x f =>
+      let (x, output) := run_aux _ _ _ mem output x in
+      run_aux _ _ _ mem output (f x)
+    | get _ getter => (Getter.get (C := getter) mem, output)
+    | write _ writer v => (tt, Writer.write (C := writer) output v)
+    end.
+
+  Definition run (refs channels : Signature.t) (A : Type)
+    (mem : Memory.t refs) (x : t refs channels A)
+    : A * Output.t channels :=
+    run_aux _ _ _ mem (Output.init channels) x.
+  Arguments run [refs channels A] _ _.
 End C.
+
