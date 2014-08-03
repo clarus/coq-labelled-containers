@@ -128,11 +128,11 @@ Module Test.
   Import C.Notations.
   Open Local Scope string.
 
-  Definition hello_world (refs channels : Signature.t) `{Writer.C string channels}
+  Definition hello_world {refs channels : Signature.t}
+    `{Writer.C string channels}
     (_ : unit) : C.t refs channels unit :=
     do! C.write _ "Hello " in
     C.write _ "world!".
-  Arguments hello_world [refs channels _] _.
 
   Compute C.run [string : Type] Memory.Nil (hello_world tt).
 
@@ -143,5 +143,13 @@ Module Test.
     C.write _ n.
 
   Compute C.run [nat : Type] (Memory.Cons 12 Memory.Nil) (read_and_print tt).
+
+  Definition hello_read_print {refs channels : Signature.t}
+    `{Getter.C nat refs} `{Writer.C string channels} `{Writer.C nat channels}
+    (_ : unit) : C.t refs channels unit :=
+    do! hello_world tt in
+    read_and_print tt.
+
+  Compute C.run [nat : Type; string : Type] (Memory.Cons 12 Memory.Nil) (hello_read_print tt).
 End Test.
 
