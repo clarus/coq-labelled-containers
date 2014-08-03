@@ -1,4 +1,5 @@
 Require Import Coq.Lists.List.
+Require Import Coq.Strings.String.
 
 Import ListNotations.
 
@@ -109,6 +110,38 @@ Module C.
     (mem : Memory.t refs) (x : t refs channels A)
     : A * Output.t channels :=
     run_aux _ _ _ mem (Output.init channels) x.
-  Arguments run [refs channels A] _ _.
+  Arguments run [refs] _ [A] _ _.
+
+  Module Notations.
+    Notation "'let!' X ':=' A 'in' B" := (bind A (fun X => B))
+      (at level 200, X ident, A at level 100, B at level 200).
+    
+    Notation "'let!' X ':' T ':=' A 'in' B" := (bind (A := T) A (fun X => B))
+    (at level 200, X ident, A at level 100, T at level 200, B at level 200).
+
+    Notation "'do!' A 'in' B" := (bind A (fun _ => B))
+      (at level 200, B at level 200).
+  End Notations.
 End C.
+
+Module Test.
+  Import C.Notations.
+  Open Local Scope string.
+
+  Definition hello_world (refs channels : Signature.t) `{Writer.C string channels}
+    (_ : unit) : C.t refs channels unit :=
+    do! C.write _ "Hello " in
+    C.write _ "world!".
+  Arguments hello_world [refs channels _] _.
+
+  Compute C.run [string : Type] Memory.Nil (hello_world tt).
+
+  Definition read_and_print {refs channels : Signature.t}
+    `{Getter.C nat refs} `{Writer.C nat channels}
+    (_ : unit) : C.t refs channels unit :=
+    let! n : nat := C.get _ in
+    C.write _ n.
+
+  Compute C.run [nat : Type] (Memory.Cons 12 Memory.Nil) (read_and_print tt).
+End Test.
 
