@@ -180,3 +180,63 @@ Module Test.
 
   Compute C.run [nat : Type] (Memory.Cons 15 Memory.Nil) (double_print 12).
 End Test.
+
+Module Event.
+  Inductive t :=
+  | Get : string -> t
+  | Put : string -> string -> t.
+End Event.
+
+Module Answer.
+  Inductive t :=
+  | Ok : string -> t
+  | Error : string -> t.
+End Answer.
+
+Module String.
+  Require Import Coq.Strings.Ascii.
+
+  Fixpoint eqb (s1 s2 : string) : bool :=
+    match (s1, s2) with
+    | (EmptyString, EmptyString) => true
+    | (EmptyString, String _ _) => false
+    | (String _ _, EmptyString) => false
+    | (String c1 s1, String c2 s2) =>
+      if ascii_dec c1 c2 then
+        eqb s1 s2
+      else
+        false
+    end.
+End String.
+
+Module Model.
+  Definition t := list (string * string).
+
+  Definition empty : t :=
+    [].
+
+  Fixpoint add (model : t) (user : string) (status : string) : t :=
+    match model with
+    | [] => [(user, status)]
+    | (user', status') :: model =>
+      if String.eqb user user' then
+        (user, status) :: model
+      else
+        (user', status') :: add model user status
+    end.
+
+  Fixpoint does_contain (model : t) (user : string) : bool :=
+    match model with
+    | [] => false
+    | (user', _) :: model => orb (String.eqb user user') (does_contain model user)
+    end.
+
+  Fixpoint find (model : t) (user : string) (H : does_contain model user = true) : string.
+    destruct model as [|(user', status') model]; simpl in H.
+    - refine (False_rect _ _).
+      congruence.
+    - destruct (String.eqb user user'); simpl in H.
+      + exact status'.
+      + exact (find model user H).
+  Defined.
+End Model.
