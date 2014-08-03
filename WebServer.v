@@ -1,3 +1,4 @@
+(** A beginning of a basic webserver. *)
 Require Import Coq.Lists.List.
 Require Import Coq.Strings.String.
 
@@ -131,13 +132,26 @@ Module C.
   Module Notations.
     Notation "'let!' X ':=' A 'in' B" := (bind A (fun X => B))
       (at level 200, X ident, A at level 100, B at level 200).
-    
+
     Notation "'let!' X ':' T ':=' A 'in' B" := (bind (A := T) A (fun X => B))
-    (at level 200, X ident, A at level 100, T at level 200, B at level 200).
+      (at level 200, X ident, A at level 100, T at level 200, B at level 200).
 
     Notation "'do!' A 'in' B" := (bind A (fun _ => B))
       (at level 200, B at level 200).
   End Notations.
+
+  Import Notations.
+
+  Fixpoint iter {env : Env.t} (A : Type)
+    (l : list A) (f : A -> C.t env unit)
+    : C.t env unit :=
+    match l with
+    | [] => ret tt
+    | x :: l =>
+      do! f x in
+      iter _ l f
+    end.
+  Arguments iter {env} [A] _ _.
 End C.
 
 Module Test.
@@ -231,12 +245,45 @@ Module Model.
     | (user', _) :: model => orb (String.eqb user user') (does_contain model user)
     end.
 
-  Fixpoint find (model : t) (user : string) (H : does_contain model user = true) : string.
-    destruct model as [|(user', status') model]; simpl in H.
-    - refine (False_rect _ _).
-      congruence.
-    - destruct (String.eqb user user'); simpl in H.
-      + exact status'.
-      + exact (find model user H).
-  Defined.
+  Fixpoint find (model : t) (user : string) : option string :=
+    match model with
+    | [] => None
+    | (user', status') :: model =>
+      if String.eqb user user' then
+        Some status'
+      else
+        find model user
+    end.
 End Model.
+
+Module TestServer.
+  Import C.Notations.
+  Open Local Scope string.
+
+  Definition process {env : Env.t} `{Ref.C Model.t env} `{Out.C Answer.t env}
+    (event : Event.t) : C.t env unit :=
+    match event with
+    | Event.Get user =>
+      let! model := C.get _ in
+      match Model.find model user with
+      | None => C.write _ (Answer.Error "user not found")
+      | Some status => C.write _ (Answer.Ok status)
+      end
+    | Event.Put user status =>
+      let! model := C.get _ in
+      do! C.set _ (Model.add model user status) in
+      if Model.does_contain model user then
+        C.write _ (Answer.Ok "user updated")
+      else
+        C.write _ (Answer.Ok "user added")
+    end.
+
+  Definition run_on_events (events : list Event.t) : list Answer.t :=
+    match C.run [Answer.t : Type] (Memory.Cons Model.empty Memory.Nil) (C.iter events process) with
+    | (_, _, output) => Output.head output
+    end.
+
+  Compute run_on_events [Event.Get "me"].
+  Compute run_on_events [Event.Put "me" "hello"; Event.Get "me"].
+  Compute run_on_events [Event.Put "me" "hello"; Event.Put "me" "hi"; Event.Get "me"].
+End TestServer.
