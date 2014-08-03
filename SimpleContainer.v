@@ -3,6 +3,8 @@ Require Import Coq.Lists.List.
 Require Import Coq.Strings.Ascii.
 Require Import Coq.Strings.String.
 
+Import ListNotations.
+
 Module String.
   Fixpoint eqb (s1 s2 : string) : bool :=
     match (s1, s2) with
@@ -127,45 +129,104 @@ Module Tagged.
     end.
 End Tagged.
 
+Module ReferencesOnTuples.
+  Module Ref.
+    Class C (A : Type) (T : Type) := make {
+      get : T -> A;
+      set : T -> A -> T }.
+
+    Instance unit : C unit unit := {
+      get tt := tt;
+      set tt tt := tt }.
+
+    Instance pair_left (A B : Type) : C A (A * B) := {
+      get xy := fst xy;
+      set xy x := (x, snd xy) }.
+
+    Instance pair_right (A B1 B2 : Type) (I : C B1 B2) : C B1 (A * B2) := {
+      get xy := get (snd xy);
+      set xy y := (fst xy, set (snd xy) y) }.
+  End Ref.
+
+  Module Test.
+    Definition A : Type := prod nat (prod bool unit).
+    
+    Definition table : A := (12, (false, tt)).
+    
+    Compute Ref.get table.
+    Compute Ref.get (Ref.set table 13).
+    Compute Ref.get table : bool.
+    Compute Ref.get (Ref.set table true).
+    Compute Ref.get (Ref.set table true) : bool.
+    
+    Open Local Scope string.
+    
+    Definition A_nat_nat : Type := prod (Tagged.t "one" nat) (prod (Tagged.t "two" nat) unit).
+    
+    Definition table_nat_nat : A_nat_nat := (Tagged.make 12, (Tagged.make 15, tt)).
+    
+    Compute Ref.get table_nat_nat.
+    Compute Ref.get (Ref.set table_nat_nat (Tagged.make 13)).
+    Compute Tagged.open (label := "two") (Ref.get table_nat_nat).
+    Compute Ref.get (Ref.set table_nat_nat (Tagged.make (label := "two") 13)).
+    Compute Tagged.open (label := "two") (Ref.get (Ref.set table_nat_nat (Tagged.make (label := "two") 13))).
+  End Test.
+End ReferencesOnTuples.
+
+Module Signature.
+  Definition t := list Type.
+End Signature.
+
+Module Memory.
+  Inductive t : Signature.t -> Type :=
+  | Nil : t []
+  | Cons : forall (A : Type) (sig : Signature.t), A -> t sig -> t (A :: sig).
+  Arguments Cons [A sig] _ _.
+
+  Definition head (A : Type) (sig : Signature.t) (mem : t (A :: sig)) : A :=
+    match mem with
+    | Cons _ _ x _ => x
+    end.
+  Arguments head [A sig] _.
+
+  Definition tail (A : Type) (sig : Signature.t) (mem : t (A :: sig)) : t sig :=
+    match mem with
+    | Cons _ _ _ mem => mem
+    end.
+  Arguments tail [A sig] _.
+End Memory.
+
 Module Ref.
-  Class C (A : Type) (T : Type) := make {
-    get : T -> A;
-    set : T -> A -> T }.
+  Class C (A : Type) (sig : Signature.t) := make {
+    get : Memory.t sig -> A;
+    set : Memory.t sig -> A -> Memory.t sig }.
 
-  Instance unit : C unit unit := {
-    get tt := tt;
-    set tt tt := tt }.
+  Instance cons_left (A : Type) (sig : Signature.t) : C A (A :: sig) := {
+    get mem := Memory.head mem;
+    set mem x := Memory.Cons x (Memory.tail mem) }.
 
-  Instance pair_left (A B : Type) : C A (A * B) := {
-    get xy := fst xy;
-    set xy x := (x, snd xy) }.
-
-  Instance pair_right (A B1 B2 : Type) (I : C B1 B2) : C B1 (A * B2) := {
-    get xy := get (snd xy);
-    set xy y := (fst xy, set (snd xy) y) }.
+  Instance cons_right (A B : Type) (sig : Signature.t)
+    (I : C A sig) : C A (B :: sig) := {
+    get mem := get (Memory.tail mem);
+    set mem x := Memory.Cons (Memory.head mem) (set (Memory.tail mem) x) }.
 End Ref.
 
-Definition A : Type := prod nat (prod bool unit).
-
-Definition table : A := (12, (false, tt)).
-
-Compute Ref.get table.
-Compute Ref.get (Ref.set table 13).
-Compute Ref.get table : bool.
-Compute Ref.get (Ref.set table true).
-Compute Ref.get (Ref.set table true) : bool.
-
-Open Local Scope string.
-
-Definition A_nat_nat : Type := prod (Tagged.t "one" nat) (prod (Tagged.t "two" nat) unit).
-
-Definition table_nat_nat : A_nat_nat := (Tagged.make 12, (Tagged.make 15, tt)).
-
-Compute Ref.get table_nat_nat.
-Compute Ref.get (Ref.set table_nat_nat (Tagged.make 13)).
-Compute Tagged.open (label := "two") (Ref.get table_nat_nat).
-Compute Ref.get (Ref.set table_nat_nat (Tagged.make (label := "two") 13)).
-Compute Tagged.open (label := "two") (Ref.get (Ref.set table_nat_nat (Tagged.make (label := "two") 13))).
+Module Test.
+  Definition sig1 : Signature.t := [nat : Type; bool : Type].
+  Definition mem1 : Memory.t sig1 :=
+    Memory.Cons 12 (Memory.Cons false Memory.Nil).
+  
+  Compute Ref.get mem1 : nat.
+  Compute Ref.get (Ref.set mem1 13) : nat.
+  Compute Ref.get mem1 : bool.
+  Compute Ref.get (Ref.set mem1 true) : nat.
+  Compute Ref.get (Ref.set mem1 true) : bool.
+  
+  Definition incr (sig : Signature.t) (r : Ref.C nat sig) (mem : Memory.t sig)
+    : Memory.t sig :=
+    let n : nat := Ref.get mem in
+    Ref.set mem (S n).
+End Test.
 
 
 
