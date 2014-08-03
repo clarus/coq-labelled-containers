@@ -228,6 +228,69 @@ Module Test.
     Ref.set mem (S n).
 End Test.
 
+Module M.
+  Definition t (sig : Signature.t) (A : Type) :=
+    Memory.t sig -> A * Memory.t sig.
+  
+  Definition ret (sig : Signature.t) (A : Type) (x : A) : t sig A :=
+    fun s =>
+      (x, s).
+  Arguments ret [sig A] _ _.
+  
+  Definition bind (sig : Signature.t) (A B : Type)
+    (x : t sig A) (f : A -> t sig B) : t sig B :=
+    fun s =>
+      let (x, s) := x s in
+      f x s.
+  Arguments bind [sig A B] _ _ _.
+  
+  Definition get (sig : Signature.t) (A : Type) (r : Ref.C A sig)
+    : M.t sig A :=
+    fun s =>
+      (Ref.get (C := r) s, s).
+  Arguments get [sig A] _ _.
+  
+  Definition set (sig : Signature.t) (A : Type) (r : Ref.C A sig) (x : A)
+    : M.t sig unit :=
+    fun s =>
+      (tt, Ref.set (C := r) s x).
+  Arguments set [sig A] _ _ _.
+  
+  Definition run (sig : Signature.t) (A : Type) (mem : Memory.t sig) (x : t sig A)
+    : A :=
+    fst (x mem).
+  Arguments run [sig A] _ _.
+  
+  Module Notations.
+    Notation "'let!' X ':=' A 'in' B" := (bind A (fun X => B))
+      (at level 200, X ident, A at level 100, B at level 200).
+    
+    Notation "'do!' A 'in' B" := (bind A (fun _ => B))
+      (at level 200, B at level 200).
+  End Notations.
+End M.
 
+Module TestMonad.
+  Import M.Notations.
+  
+  Definition incr (sig : Signature.t) (r : Ref.C nat sig) : M.t sig unit :=
+    let! n := M.get r in
+    M.set r (S n).
+  Arguments incr [sig] _ _.
+  
+  Definition sig : Signature.t := [bool : Type; nat : Type].
+  Definition mem : Memory.t sig :=
+    Memory.Cons false (Memory.Cons 12 Memory.Nil).
+  
+  Definition two : nat :=
+    M.run mem (
+      let r : Ref.C nat _ := _ in
+      do! M.set r 0 in
+      do! incr r in
+      do! incr r in
+      M.get r).
+
+  Compute two.
+End TestMonad.
 
 
